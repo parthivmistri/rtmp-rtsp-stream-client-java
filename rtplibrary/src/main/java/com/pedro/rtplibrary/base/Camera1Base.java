@@ -4,6 +4,7 @@ import android.content.Context;
 import android.hardware.Camera;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
+import android.media.MediaRecorder;
 import android.os.Build;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -66,6 +67,7 @@ public abstract class Camera1Base
   private GlInterface glInterface;
   private boolean streaming = false;
   private boolean videoEnabled = true;
+  private boolean audioInitialized = false;
   private boolean onPreview = false;
   protected RecordController recordController;
   private int previewWidth, previewHeight;
@@ -269,14 +271,21 @@ public abstract class Camera1Base
    * @return true if success, false if you get a error (Normally because the encoder selected
    * doesn't support any configuration seated or your device hasn't a AAC encoder).
    */
-  public boolean prepareAudio(int bitrate, int sampleRate, boolean isStereo, boolean echoCanceler,
+  public boolean prepareAudio(int audioSource, int bitrate, int sampleRate, boolean isStereo, boolean echoCanceler,
       boolean noiseSuppressor) {
-     if (!microphoneManager.createMicrophone(sampleRate, isStereo, echoCanceler, noiseSuppressor)) {
+     if (!microphoneManager.createMicrophone(audioSource, sampleRate, isStereo, echoCanceler, noiseSuppressor)) {
        return false;
      }
     prepareAudioRtp(isStereo, sampleRate);
-    return audioEncoder.prepareAudioEncoder(bitrate, sampleRate, isStereo,
+    audioInitialized = audioEncoder.prepareAudioEncoder(bitrate, sampleRate, isStereo,
         microphoneManager.getMaxInputSize());
+    return audioInitialized;
+  }
+
+  public boolean prepareAudio(int bitrate, int sampleRate, boolean isStereo, boolean echoCanceler,
+      boolean noiseSuppressor) {
+    return prepareAudio(MediaRecorder.AudioSource.DEFAULT, bitrate, sampleRate, isStereo, echoCanceler,
+        noiseSuppressor);
   }
 
   public boolean prepareAudio(int bitrate, int sampleRate, boolean isStereo) {
@@ -531,9 +540,9 @@ public abstract class Camera1Base
 
   private void startEncoders() {
     videoEncoder.start();
-    audioEncoder.start();
+    if (audioInitialized) audioEncoder.start();
     prepareGlView();
-    microphoneManager.start();
+    if (audioInitialized) microphoneManager.start();
     cameraManager.setRotation(videoEncoder.getRotation());
     if (!cameraManager.isRunning() && videoEncoder.getWidth() != previewWidth
         || videoEncoder.getHeight() != previewHeight) {
@@ -587,7 +596,7 @@ public abstract class Camera1Base
       stopStreamRtp();
     }
     if (!recordController.isRecording()) {
-      microphoneManager.stop();
+      if (audioInitialized) microphoneManager.stop();
       if (glInterface != null && Build.VERSION.SDK_INT >= 18) {
         glInterface.removeMediaCodecSurface();
         if (glInterface instanceof OffScreenGlThread) {
@@ -596,7 +605,7 @@ public abstract class Camera1Base
         }
       }
       videoEncoder.stop();
-      audioEncoder.stop();
+      if (audioInitialized) audioEncoder.stop();
       recordController.resetFormats();
     }
   }
@@ -677,14 +686,14 @@ public abstract class Camera1Base
    * Mute microphone, can be called before, while and after stream.
    */
   public void disableAudio() {
-    microphoneManager.mute();
+    if (audioInitialized) microphoneManager.mute();
   }
 
   /**
    * Enable a muted microphone, can be called before, while and after stream.
    */
   public void enableAudio() {
-    microphoneManager.unMute();
+    if (audioInitialized) microphoneManager.unMute();
   }
 
   /**

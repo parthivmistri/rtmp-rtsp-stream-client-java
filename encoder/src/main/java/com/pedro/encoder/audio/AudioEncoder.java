@@ -66,8 +66,9 @@ public class AudioEncoder extends BaseEncoder implements GetMicrophoneData {
       running = false;
       Log.i(TAG, "prepared");
       return true;
-    } catch (IOException | IllegalStateException e) {
+    } catch (Exception e) {
       Log.e(TAG, "Create AudioEncoder failed.", e);
+      this.stop();
       return false;
     }
   }
